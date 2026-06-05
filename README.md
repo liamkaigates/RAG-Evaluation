@@ -95,7 +95,3 @@ docker run --rm -p 8080:8080 -e OPENAI_API_KEY=$OPENAI_API_KEY hybrid-rag-platfo
 ```
 
 The container ingests `docs/internal`, builds the ChromaDB/BM25 hybrid index at startup, and serves the FastAPI dashboard on port `8080`.
-
-## Suggested Resume Bullet
-
-Built a production-style hybrid RAG platform using Python 3.11, OpenAI text embeddings, ChromaDB, BM25 via rank_bm25, LangChain text splitters, GPT-4o grounded generation, FastAPI, Docker, Recall@K/MRR/NDCG evaluation, and an interactive citation dashboard.
