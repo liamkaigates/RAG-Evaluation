@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+import hashlib
+import math
+import os
+import pickle
+import re
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Protocol
+
+import chromadb
+from chromadb.config import Settings
+from openai import OpenAI
+from rank_bm25 import BM25Okapi
+
+from rag_eval.data import Document
+
+
+COLLECTION_NAME = "internal_docs"
+METADATA_FILE = "metadata.pkl"
+CHROMA_DIR = "chroma"
+OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+
+
+class EmbeddingModel(Protocol):
+    name: str
+    dimension: int
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    id: str
+    title: str
+    text: str
+    score: float
+    rank: int
+    sparse_score: float
+    dense_score: float
+    source_path: str = ""
+    section: str = ""
+    citation: str = ""
+
+
+class OpenAITextEmbeddingModel:
+    name = OPENAI_EMBEDDING_MODEL
+    dimension = 1536
+
+    def __init__(self, api_key: str | None = None) -> None:
+        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        response = self.client.embeddings.create(model=self.name, input=texts)
+        return [item.embedding for item in response.data]
+
+
+class LocalHashEmbeddingModel:
+    name = "local-hash-embedding"
+    dimension = 384
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [self._embed_one(text) for text in texts]
+
+    def _embed_one(self, text: str) -> list[float]:
+        vector = [0.0] * self.dimension
+        for token in tokenize(text):
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            index = int.from_bytes(digest[:4], "big") % self.dimension
+            sign = 1.0 if digest[4] % 2 == 0 else -1.0
+            vector[index] += sign
+        norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+        return [value / norm for value in vector]
+
+
+@dataclass
+class RagIndex:
+    path: Path
+    documents: List[Document]
+    bm25: BM25Okapi
+    embedding_model: EmbeddingModel
+    sparse_weight: float = 0.45
+
+    @property
+    def dense_dimension(self) -> int:
+        return self.embedding_model.dimension
+
+    @property
+    def retrieval_mode(self) -> str:
+        return f"{self.embedding_model.name}_chromadb_bm25_hybrid"
+
+    def search(self, query: str, top_k: int = 5, sparse_weight: float | None = None) -> List[SearchResult]:
+        if not query.strip():
+            return []
+
+        sparse_scores = self.bm25.get_scores(tokenize(query))
+        dense_scores_by_id = self._dense_scores(query, fetch_k=max(top_k * 4, 20))
+        dense_scores = [dense_scores_by_id.get(document.id, 0.0) for document in self.documents]
+
+        sparse_normalized = min_max_scale(list(sparse_scores))
+        dense_normalized = min_max_scale(dense_scores)
+        sparse_ratio = self.sparse_weight if sparse_weight is None else max(0.0, min(1.0, sparse_weight))
+        fused_scores = [
+            (sparse_ratio * sparse_value) + ((1.0 - sparse_ratio) * dense_value)
+            for sparse_value, dense_value in zip(sparse_normalized, dense_normalized)
+        ]
+
+        ranked_indexes = sorted(range(len(self.documents)), key=lambda index: fused_scores[index], reverse=True)
+        results = []
+        for index in ranked_indexes:
+            if len(results) >= top_k:
+                break
+            if fused_scores[index] <= 0 and sparse_scores[index] <= 0 and dense_scores[index] <= 0:
+                continue
+            document = self.documents[index]
+            results.append(
+                SearchResult(
+                    id=document.id,
+                    title=document.title,
+                    text=document.text,
+                    score=float(fused_scores[index]),
+                    rank=len(results) + 1,
+                    sparse_score=float(sparse_scores[index]),
+                    dense_score=float(dense_scores[index]),
+                    source_path=document.source_path,
+                    section=document.section,
+                    citation=document.citation_label,
+                )
+            )
+        return results
+
+    def _dense_scores(self, query: str, fetch_k: int) -> dict[str, float]:
+        collection = open_collection(self.path)
+        query_embedding = self.embedding_model.embed([query])[0]
+        payload = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=min(fetch_k, len(self.documents)),
+            include=["distances"],
+        )
+        ids = payload.get("ids", [[]])[0]
+        distances = payload.get("distances", [[]])[0]
+        return {doc_id: max(0.0, 1.0 - float(distance)) for doc_id, distance in zip(ids, distances)}
+
+
+def tokenize(text: str) -> list[str]:
+    return re.findall(r"[a-zA-Z][a-zA-Z0-9@-]*", text.lower())
+
+
+def min_max_scale(values: list[float]) -> list[float]:
+    if not values:
+        return values
+    low = min(values)
+    high = max(values)
+    if high <= low:
+        return [0.0 for _ in values]
+    return [(value - low) / (high - low) for value in values]
+
+
+def embedding_model_from_env(provider: str | None = None) -> EmbeddingModel:
+    selected = (provider or os.getenv("RAG_EMBEDDING_PROVIDER") or "openai").lower()
+    if selected == "local":
+        return LocalHashEmbeddingModel()
+    if selected != "openai":
+        raise ValueError("RAG_EMBEDDING_PROVIDER must be 'openai' or 'local'.")
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY is required for OpenAI text embeddings. Use RAG_EMBEDDING_PROVIDER=local for offline tests.")
+    return OpenAITextEmbeddingModel()
+
+
+def open_collection(path: Path):
+    client = chromadb.PersistentClient(
+        path=str(path / CHROMA_DIR),
+        settings=Settings(anonymized_telemetry=False),
+    )
+    return client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+
+def build_index(documents: List[Document], embedding_provider: str | None = None, dense_dimension: int | None = None) -> RagIndex:
+    if not documents:
+        raise ValueError("Cannot build an index with no documents.")
+
+    embedding_model = embedding_model_from_env(embedding_provider)
+    bm25 = BM25Okapi([tokenize(document.text) for document in documents])
+    return RagIndex(path=Path(), documents=documents, bm25=bm25, embedding_model=embedding_model)
+
+
+def save_index(index: RagIndex, path: str | Path) -> None:
+    path = Path(path)
+    if path.exists():
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    path.mkdir(parents=True, exist_ok=True)
+
+    index.path = path
+    collection = open_collection(path)
+    texts = [document.text for document in index.documents]
+    embeddings = index.embedding_model.embed(texts)
+    collection.add(
+        ids=[document.id for document in index.documents],
+        documents=texts,
+        embeddings=embeddings,
+        metadatas=[
+            {
+                "title": document.title,
+                "source_path": document.source_path,
+                "section": document.section,
+                "chunk_index": document.chunk_index,
+            }
+            for document in index.documents
+        ],
+    )
+    with (path / METADATA_FILE).open("wb") as handle:
+        pickle.dump(
+            {
+                "documents": index.documents,
+                "embedding_provider": index.embedding_model.name,
+                "embedding_dimension": index.embedding_model.dimension,
+                "sparse_weight": index.sparse_weight,
+            },
+            handle,
+        )
+
+
+def load_index(path: str | Path, embedding_provider: str | None = None) -> RagIndex:
+    path = Path(path)
+    with (path / METADATA_FILE).open("rb") as handle:
+        metadata = pickle.load(handle)
+    documents = metadata["documents"]
+    bm25 = BM25Okapi([tokenize(document.text) for document in documents])
+
+    stored_provider = metadata.get("embedding_provider", "")
+    selected_provider = embedding_provider
+    if selected_provider is None and stored_provider == LocalHashEmbeddingModel.name:
+        selected_provider = "local"
+    embedding_model = embedding_model_from_env(selected_provider)
+    if embedding_model.dimension != metadata.get("embedding_dimension"):
+        raise ValueError("Embedding model dimension does not match the stored ChromaDB index.")
+    return RagIndex(
+        path=path,
+        documents=documents,
+        bm25=bm25,
+        embedding_model=embedding_model,
+        sparse_weight=float(metadata.get("sparse_weight", 0.45)),
+    )

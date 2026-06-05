@@ -1,0 +1,19 @@
+[project]
+name = "rag-evaluation-platform"
+version = "0.1.0"
+description = "Hybrid RAG platform with OpenAI embeddings, ChromaDB, BM25, GPT-4o, FastAPI, and Docker."
+requires-python = ">=3.11"
+dependencies = [
+  "chromadb>=0.5.0",
+  "fastapi>=0.111.0",
+  "langchain-text-splitters>=0.2.0",
+  "openai>=1.40.0",
+  "rank-bm25>=0.2.2",
+  "uvicorn[standard]>=0.30.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

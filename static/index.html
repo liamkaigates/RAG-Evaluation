@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hybrid RAG Platform</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <p>Hybrid RAG Platform</p>
+        <h1>Hybrid RAG Answering Dashboard</h1>
+      </div>
+      <div id="status">Loading</div>
+    </header>
+
+    <main>
+      <section class="panel metrics">
+        <div><span>Documents</span><strong id="docCount">--</strong></div>
+        <div><span>Indexed Chunks</span><strong id="chunkCount">--</strong></div>
+        <div><span>Eval Questions</span><strong id="questionCount">--</strong></div>
+        <div><span>MRR</span><strong id="mrr">--</strong></div>
+      </section>
+
+      <section class="panel query">
+        <h2>Query Inspector</h2>
+        <div class="controls">
+          <input id="question" value="How does RAG reduce hallucination?">
+          <button id="search">Search</button>
+        </div>
+        <div class="answer">
+          <span>Generated Answer</span>
+          <p id="answer">--</p>
+          <small id="citations">Citations: --</small>
+          <div id="sources" class="sources"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Retrieved Context</h2>
+        <div id="results" class="results"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Evaluation Results</h2>
+        <div id="evalRows" class="table"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

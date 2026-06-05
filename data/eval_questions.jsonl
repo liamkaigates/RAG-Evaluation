@@ -1,0 +1,7 @@
+{"id":"q1","question":"How does RAG reduce hallucination?","relevant_doc_ids":["rag_overview","guardrails"],"answer_keywords":["grounding","retrieved","citations","context"]}
+{"id":"q2","question":"Which metrics evaluate retrieval quality?","relevant_doc_ids":["evaluation"],"answer_keywords":["Recall@K","Precision@K","MRR","NDCG","Hit Rate"]}
+{"id":"q3","question":"Why is chunking important in a RAG system?","relevant_doc_ids":["chunking"],"answer_keywords":["chunks","context","overlapping","recall"]}
+{"id":"q4","question":"What is the purpose of a reranker?","relevant_doc_ids":["reranking"],"answer_keywords":["reranker","precision","candidates","top"]}
+{"id":"q5","question":"How can teams compare RAG experiments?","relevant_doc_ids":["experiments"],"answer_keywords":["experiment","chunk sizes","retrieval metrics","latency"]}
+{"id":"q6","question":"What operational metrics matter for production RAG?","relevant_doc_ids":["latency"],"answer_keywords":["latency","cost","caching","batching"]}
+
