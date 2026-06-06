@@ -1,7 +1,8 @@
-.PHONY: ingest build-index build-internal query query-internal evaluate test serve serve-internal
+.PHONY: setup install ingest build-index build-internal query query-internal evaluate test serve serve-internal
 
 PYTHONPATH := src
-PYTHON ?= python3.11
+PYTHON ?= $(if $(wildcard .venv311/bin/python),.venv311/bin/python,python3.11)
+PIP := $(PYTHON) -m pip
 CORPUS := data/corpus.jsonl
 QUESTIONS := data/eval_questions.jsonl
 INDEX := artifacts/index
@@ -9,6 +10,13 @@ INTERNAL_DOCS := docs/internal
 INTERNAL_CORPUS := data/internal_corpus.jsonl
 INTERNAL_INDEX := artifacts/internal_index
 INTERNAL_QUESTIONS := data/internal_eval_questions.jsonl
+
+setup:
+	python3.11 -m venv .venv311
+	.venv311/bin/python -m pip install -r requirements.txt
+
+install:
+	$(PIP) install -r requirements.txt
 
 ingest:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m rag_eval.cli ingest --source-dir $(INTERNAL_DOCS) --output $(INTERNAL_CORPUS)

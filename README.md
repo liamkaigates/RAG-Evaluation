@@ -29,6 +29,14 @@ make query-internal
 make serve-internal
 ```
 
+Or use the project-managed local environment:
+
+```bash
+make setup
+export OPENAI_API_KEY=...
+make build-internal
+```
+
 Open:
 
 ```text
