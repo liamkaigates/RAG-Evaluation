@@ -12,7 +12,7 @@ from typing import List, Protocol
 
 import chromadb
 from chromadb.config import Settings
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, AuthenticationError, OpenAI, RateLimitError
 from rank_bm25 import BM25Okapi
 
 from rag_eval.data import Document
@@ -30,6 +30,10 @@ class EmbeddingModel(Protocol):
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         ...
+
+
+class EmbeddingProviderError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -54,7 +58,23 @@ class OpenAITextEmbeddingModel:
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        response = self.client.embeddings.create(model=self.name, input=texts)
+        try:
+            response = self.client.embeddings.create(model=self.name, input=texts)
+        except AuthenticationError as exc:
+            raise EmbeddingProviderError(
+                "OpenAI authentication failed. Check that OPENAI_API_KEY is set to a valid key."
+            ) from exc
+        except RateLimitError as exc:
+            raise EmbeddingProviderError(
+                "OpenAI rejected the embedding request because the account is rate-limited or out of quota. "
+                "Check billing/quota, or run `make build-internal-local` for offline development."
+            ) from exc
+        except APIConnectionError as exc:
+            raise EmbeddingProviderError(
+                "Could not reach OpenAI to create embeddings. Check network access, or run `make build-internal-local`."
+            ) from exc
+        except APIStatusError as exc:
+            raise EmbeddingProviderError(f"OpenAI embedding request failed: {exc.message}") from exc
         return [item.embedding for item in response.data]
 
 
@@ -166,7 +186,10 @@ def embedding_model_from_env(provider: str | None = None) -> EmbeddingModel:
     if selected != "openai":
         raise ValueError("RAG_EMBEDDING_PROVIDER must be 'openai' or 'local'.")
     if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY is required for OpenAI text embeddings. Use RAG_EMBEDDING_PROVIDER=local for offline tests.")
+        raise EmbeddingProviderError(
+            "OPENAI_API_KEY is required for OpenAI text embeddings. "
+            "Set OPENAI_API_KEY for production, or run `make build-internal-local` for offline development."
+        )
     return OpenAITextEmbeddingModel()
 
 

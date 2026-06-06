@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from rag_eval.data import load_documents, load_questions
 from rag_eval.evaluate import evaluate_questions
 from rag_eval.generator import generate_answer
 from rag_eval.ingest import ingest_directory, write_corpus
-from rag_eval.retriever import build_index, load_index, save_index
+from rag_eval.retriever import EmbeddingProviderError, build_index, load_index, save_index
 
 
 def ingest_command(args: argparse.Namespace) -> None:
@@ -27,8 +28,14 @@ def ingest_command(args: argparse.Namespace) -> None:
 
 
 def build_index_command(args: argparse.Namespace) -> None:
-    index = build_index(load_documents(args.corpus), embedding_provider=args.embedding_provider)
-    save_index(index, args.index)
+    try:
+        index = build_index(load_documents(args.corpus), embedding_provider=args.embedding_provider)
+        save_index(index, args.index)
+    except EmbeddingProviderError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        print("Production builds use OpenAI text embeddings. For local development, run:", file=sys.stderr)
+        print("  make build-internal-local", file=sys.stderr)
+        raise SystemExit(2) from exc
     print(
         json.dumps(
             {
