@@ -80,6 +80,13 @@ RAG_GENERATION_PROVIDER=openai # default; use local for tests
 The production path uses OpenAI `text-embedding-3-small` for document/query embeddings and `gpt-4o` for grounded answer generation.
 `make build-internal` requires an OpenAI API key with available embedding quota. If the API returns `insufficient_quota`, use `make build-internal-local` while developing locally, or enable billing/quota on the OpenAI account before rebuilding the production index.
 
+## Operations
+
+- `GET /healthz` reports service health for load balancers and the Docker healthcheck.
+- `GET /api/evaluate` results are cached in-process per `top_k` (evaluation runs generation for every question); pass `refresh=true` to recompute.
+- Provider failures (missing key, quota, network) return HTTP 503 with a descriptive message instead of a raw 500.
+- Evaluation runs questions concurrently (default 8 workers) when using OpenAI providers.
+
 ## Data Format
 
 Corpus JSONL:
