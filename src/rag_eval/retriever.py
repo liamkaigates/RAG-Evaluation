@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import math
 import os
 import pickle
 import re
 import shutil
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
-from typing import List, Protocol
+from typing import Any, List, Protocol
 
 import chromadb
 from chromadb.config import Settings
@@ -22,6 +25,8 @@ COLLECTION_NAME = "internal_docs"
 METADATA_FILE = "metadata.pkl"
 CHROMA_DIR = "chroma"
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_BATCH_SIZE = 256
+CHROMA_ADD_BATCH_SIZE = 1000
 
 
 class EmbeddingModel(Protocol):
@@ -58,6 +63,12 @@ class OpenAITextEmbeddingModel:
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            embeddings.extend(self._embed_batch(texts[start : start + EMBEDDING_BATCH_SIZE]))
+        return embeddings
+
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         try:
             response = self.client.embeddings.create(model=self.name, input=texts)
         except AuthenticationError as exc:
@@ -88,12 +99,16 @@ class LocalHashEmbeddingModel:
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self.dimension
         for token in tokenize(text):
-            digest = hashlib.sha256(token.encode("utf-8")).digest()
-            index = int.from_bytes(digest[:4], "big") % self.dimension
-            sign = 1.0 if digest[4] % 2 == 0 else -1.0
+            index, sign = _hash_token(token, self.dimension)
             vector[index] += sign
         norm = math.sqrt(sum(value * value for value in vector)) or 1.0
         return [value / norm for value in vector]
+
+
+@lru_cache(maxsize=65536)
+def _hash_token(token: str, dimension: int) -> tuple[int, float]:
+    digest = hashlib.sha256(token.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % dimension, 1.0 if digest[4] % 2 == 0 else -1.0
 
 
 @dataclass
@@ -103,6 +118,10 @@ class RagIndex:
     bm25: BM25Okapi
     embedding_model: EmbeddingModel
     sparse_weight: float = 0.45
+    _collection: Any = field(default=None, init=False, repr=False, compare=False)
+    _collection_lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False, compare=False
+    )
 
     @property
     def dense_dimension(self) -> int:
@@ -128,13 +147,14 @@ class RagIndex:
             for sparse_value, dense_value in zip(sparse_normalized, dense_normalized)
         ]
 
-        ranked_indexes = sorted(range(len(self.documents)), key=lambda index: fused_scores[index], reverse=True)
+        candidate_indexes = [
+            index
+            for index in range(len(self.documents))
+            if fused_scores[index] > 0 or sparse_scores[index] > 0 or dense_scores[index] > 0
+        ]
+        ranked_indexes = heapq.nlargest(top_k, candidate_indexes, key=fused_scores.__getitem__)
         results = []
         for index in ranked_indexes:
-            if len(results) >= top_k:
-                break
-            if fused_scores[index] <= 0 and sparse_scores[index] <= 0 and dense_scores[index] <= 0:
-                continue
             document = self.documents[index]
             results.append(
                 SearchResult(
@@ -152,8 +172,14 @@ class RagIndex:
             )
         return results
 
+    def collection(self):
+        with self._collection_lock:
+            if self._collection is None:
+                self._collection = open_collection(self.path)
+            return self._collection
+
     def _dense_scores(self, query: str, fetch_k: int) -> dict[str, float]:
-        collection = open_collection(self.path)
+        collection = self.collection()
         query_embedding = self.embedding_model.embed([query])[0]
         payload = collection.query(
             query_embeddings=[query_embedding],
@@ -223,27 +249,33 @@ def save_index(index: RagIndex, path: str | Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
     index.path = path
-    collection = open_collection(path)
+    index._collection = None
+    collection = index.collection()
     texts = [document.text for document in index.documents]
     embeddings = index.embedding_model.embed(texts)
-    collection.add(
-        ids=[document.id for document in index.documents],
-        documents=texts,
-        embeddings=embeddings,
-        metadatas=[
-            {
-                "title": document.title,
-                "source_path": document.source_path,
-                "section": document.section,
-                "chunk_index": document.chunk_index,
-            }
-            for document in index.documents
-        ],
-    )
+    metadatas = [
+        {
+            "title": document.title,
+            "source_path": document.source_path,
+            "section": document.section,
+            "chunk_index": document.chunk_index,
+        }
+        for document in index.documents
+    ]
+    ids = [document.id for document in index.documents]
+    for start in range(0, len(ids), CHROMA_ADD_BATCH_SIZE):
+        stop = start + CHROMA_ADD_BATCH_SIZE
+        collection.add(
+            ids=ids[start:stop],
+            documents=texts[start:stop],
+            embeddings=embeddings[start:stop],
+            metadatas=metadatas[start:stop],
+        )
     with (path / METADATA_FILE).open("wb") as handle:
         pickle.dump(
             {
                 "documents": index.documents,
+                "bm25": index.bm25,
                 "embedding_provider": index.embedding_model.name,
                 "embedding_dimension": index.embedding_model.dimension,
                 "sparse_weight": index.sparse_weight,
@@ -257,7 +289,7 @@ def load_index(path: str | Path, embedding_provider: str | None = None) -> RagIn
     with (path / METADATA_FILE).open("rb") as handle:
         metadata = pickle.load(handle)
     documents = metadata["documents"]
-    bm25 = BM25Okapi([tokenize(document.text) for document in documents])
+    bm25 = metadata.get("bm25") or BM25Okapi([tokenize(document.text) for document in documents])
 
     stored_provider = metadata.get("embedding_provider", "")
     selected_provider = embedding_provider

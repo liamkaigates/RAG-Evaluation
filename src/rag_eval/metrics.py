@@ -33,9 +33,9 @@ def retrieval_metrics(question: EvalQuestion, results: List[SearchResult]) -> Di
 
 
 def answer_metrics(question: EvalQuestion, answer: str, citations: List[str], context: List[SearchResult]) -> Dict[str, float]:
-    answer_terms = tokenize(answer)
+    answer_lower = answer.lower()
     keywords = [keyword.lower() for keyword in question.answer_keywords]
-    keyword_hits = sum(1 for keyword in keywords if keyword.lower() in answer.lower())
+    keyword_hits = sum(1 for keyword in keywords if keyword in answer_lower)
     context_text = " ".join(result.text for result in context).lower()
     answer_tokens = tokenize(answer)
     supported_tokens = [token for token in answer_tokens if token in context_text]
