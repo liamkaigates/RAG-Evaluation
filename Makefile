@@ -1,4 +1,4 @@
-.PHONY: setup install ingest build-index build-internal query query-internal evaluate test serve serve-internal
+.PHONY: setup install ingest build-index build-internal query query-internal evaluate test lint serve serve-internal
 
 PYTHONPATH := src
 PYTHON ?= $(if $(wildcard .venv311/bin/python),.venv311/bin/python,python3.11)
@@ -13,10 +13,10 @@ INTERNAL_QUESTIONS := data/internal_eval_questions.jsonl
 
 setup:
 	python3.11 -m venv .venv311
-	.venv311/bin/python -m pip install -r requirements.txt
+	.venv311/bin/python -m pip install -r requirements.lock -r requirements-dev.txt
 
 install:
-	$(PIP) install -r requirements.txt
+	$(PIP) install -r requirements.lock -r requirements-dev.txt
 
 ingest:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m rag_eval.cli ingest --source-dir $(INTERNAL_DOCS) --output $(INTERNAL_CORPUS)
@@ -38,6 +38,10 @@ evaluate:
 
 test:
 	RAG_EMBEDDING_PROVIDER=local RAG_GENERATION_PROVIDER=local PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m unittest discover -s tests
+
+lint:
+	$(PYTHON) -m ruff check src tests
+	$(PYTHON) -m mypy
 
 serve:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m rag_eval.api --index $(INDEX) --questions $(QUESTIONS) --port 8080

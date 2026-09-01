@@ -1,5 +1,15 @@
+let apiKey = sessionStorage.getItem("ragApiKey") || "";
+
 async function getJson(path) {
-  const response = await fetch(path);
+  let response = await fetch(path, { headers: apiKey ? { "X-API-Key": apiKey } : {} });
+  if (response.status === 401) {
+    const entered = window.prompt("This deployment requires an API key:");
+    if (entered) {
+      apiKey = entered.trim();
+      sessionStorage.setItem("ragApiKey", apiKey);
+      response = await fetch(path, { headers: { "X-API-Key": apiKey } });
+    }
+  }
   if (!response.ok) throw new Error(`Request failed: ${path}`);
   return response.json();
 }

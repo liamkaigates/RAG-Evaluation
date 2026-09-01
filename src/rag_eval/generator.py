@@ -3,12 +3,10 @@ from __future__ import annotations
 import os
 import re
 from functools import lru_cache
-from typing import List
 
 from openai import OpenAI
 
 from rag_eval.retriever import SearchResult
-
 
 GPT_MODEL = "gpt-4o"
 
@@ -22,11 +20,11 @@ def tokenize(text: str) -> set[str]:
     return set(re.findall(r"[a-zA-Z][a-zA-Z0-9@-]*", text.lower()))
 
 
-def split_sentences(text: str) -> List[str]:
+def split_sentences(text: str) -> list[str]:
     return [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
 
 
-def generate_answer(question: str, results: List[SearchResult], max_sentences: int = 3, provider: str | None = None) -> dict:
+def generate_answer(question: str, results: list[SearchResult], max_sentences: int = 3, provider: str | None = None) -> dict:
     selected_provider = (provider or os.getenv("RAG_GENERATION_PROVIDER") or "openai").lower()
     if selected_provider == "local":
         return generate_extractive_answer(question, results, max_sentences=max_sentences)
@@ -37,7 +35,7 @@ def generate_answer(question: str, results: List[SearchResult], max_sentences: i
     return generate_gpt4o_answer(question, results, max_sentences=max_sentences)
 
 
-def generate_gpt4o_answer(question: str, results: List[SearchResult], max_sentences: int = 3) -> dict:
+def generate_gpt4o_answer(question: str, results: list[SearchResult], max_sentences: int = 3) -> dict:
     if not results:
         return empty_answer()
 
@@ -78,7 +76,7 @@ def generate_gpt4o_answer(question: str, results: List[SearchResult], max_senten
     }
 
 
-def generate_extractive_answer(question: str, results: List[SearchResult], max_sentences: int = 3) -> dict:
+def generate_extractive_answer(question: str, results: list[SearchResult], max_sentences: int = 3) -> dict:
     query_terms = tokenize(question)
     candidates = []
     for result in results:
@@ -101,7 +99,7 @@ def generate_extractive_answer(question: str, results: List[SearchResult], max_s
     cited_ids: list[str] = []
     citation_numbers: dict[str, int] = {}
     answer_parts: list[str] = []
-    for sentence, result in zip(selected_sentences, selected_results):
+    for sentence, result in zip(selected_sentences, selected_results, strict=True):
         if result.id not in citation_numbers:
             citation_numbers[result.id] = len(citation_numbers) + 1
             cited_ids.append(result.id)

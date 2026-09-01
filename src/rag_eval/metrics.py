@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, List
 
 from rag_eval.data import EvalQuestion
 from rag_eval.generator import tokenize
 from rag_eval.retriever import SearchResult
 
 
-def dcg(relevance: List[int]) -> float:
+def dcg(relevance: list[int]) -> float:
     return sum(rel / math.log2(index + 2) for index, rel in enumerate(relevance))
 
 
-def retrieval_metrics(question: EvalQuestion, results: List[SearchResult]) -> Dict[str, float]:
+def retrieval_metrics(question: EvalQuestion, results: list[SearchResult]) -> dict[str, float]:
     relevant = set(question.relevant_doc_ids)
     retrieved = [result.id for result in results]
     hits = [1 if doc_id in relevant else 0 for doc_id in retrieved]
@@ -32,7 +31,7 @@ def retrieval_metrics(question: EvalQuestion, results: List[SearchResult]) -> Di
     }
 
 
-def answer_metrics(question: EvalQuestion, answer: str, citations: List[str], context: List[SearchResult]) -> Dict[str, float]:
+def answer_metrics(question: EvalQuestion, answer: str, citations: list[str], context: list[SearchResult]) -> dict[str, float]:
     answer_lower = answer.lower()
     keywords = [keyword.lower() for keyword in question.answer_keywords]
     keyword_hits = sum(1 for keyword in keywords if keyword in answer_lower)
@@ -47,7 +46,7 @@ def answer_metrics(question: EvalQuestion, answer: str, citations: List[str], co
     }
 
 
-def mean_metrics(rows: List[Dict[str, float]]) -> Dict[str, float]:
+def mean_metrics(rows: list[dict[str, float]]) -> dict[str, float]:
     if not rows:
         return {}
     keys = rows[0].keys()

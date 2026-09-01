@@ -1,6 +1,7 @@
+import pickle
 import unittest
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rag_eval.data import load_documents, load_questions
 from rag_eval.evaluate import evaluate_questions
@@ -55,6 +56,25 @@ class RagPipelineTest(unittest.TestCase):
             self.assertIn("handbook.md", documents[0].source_path)
             self.assertGreaterEqual(len(results), 1)
             self.assertIn("Audit", results[0].text)
+
+    def test_loads_legacy_pickle_metadata(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "index"
+            index = persist_index(load_documents("data/corpus.jsonl"), path)
+            legacy = {
+                "documents": index.documents,
+                "embedding_provider": index.embedding_model.name,
+                "embedding_dimension": index.embedding_model.dimension,
+                "sparse_weight": index.sparse_weight,
+            }
+            (path / "metadata.pkl").write_bytes(pickle.dumps(legacy))
+            (path / "metadata.json").unlink()
+
+            loaded = load_index(path, embedding_provider="local")
+            results = loaded.search("Which metrics evaluate retrieval quality?", top_k=3)
+
+            self.assertEqual(len(loaded.documents), len(index.documents))
+            self.assertGreater(len(results), 0)
 
 
 def persist_index(documents, path: Path):

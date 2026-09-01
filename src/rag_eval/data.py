@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
 
 
 @dataclass(frozen=True)
@@ -26,8 +26,8 @@ class Document:
 class EvalQuestion:
     id: str
     question: str
-    relevant_doc_ids: List[str]
-    answer_keywords: List[str]
+    relevant_doc_ids: list[str]
+    answer_keywords: list[str]
 
 
 def read_jsonl(path: str | Path) -> Iterable[dict]:
@@ -38,7 +38,7 @@ def read_jsonl(path: str | Path) -> Iterable[dict]:
                 yield json.loads(line)
 
 
-def load_documents(path: str | Path) -> List[Document]:
+def load_documents(path: str | Path) -> list[Document]:
     documents = []
     for row in read_jsonl(path):
         documents.append(
@@ -54,7 +54,7 @@ def load_documents(path: str | Path) -> List[Document]:
     return documents
 
 
-def load_questions(path: str | Path) -> List[EvalQuestion]:
+def load_questions(path: str | Path) -> list[EvalQuestion]:
     return [
         EvalQuestion(
             id=row["id"],

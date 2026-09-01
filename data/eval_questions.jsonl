@@ -4,4 +4,10 @@
 {"id":"q4","question":"What is the purpose of a reranker?","relevant_doc_ids":["reranking"],"answer_keywords":["reranker","precision","candidates","top"]}
 {"id":"q5","question":"How can teams compare RAG experiments?","relevant_doc_ids":["experiments"],"answer_keywords":["experiment","chunk sizes","retrieval metrics","latency"]}
 {"id":"q6","question":"What operational metrics matter for production RAG?","relevant_doc_ids":["latency"],"answer_keywords":["latency","cost","caching","batching"]}
+{"id":"q7","question":"How do embedding models enable semantic search?","relevant_doc_ids":["embeddings"],"answer_keywords":["vectors","semantic","cosine","similarity"]}
+{"id":"q8","question":"What is the difference between sparse and dense retrieval?","relevant_doc_ids":["embeddings"],"answer_keywords":["TF-IDF","sparse","neural","semantic"]}
+{"id":"q9","question":"When should a RAG system decline to answer a question?","relevant_doc_ids":["guardrails"],"answer_keywords":["decline","weak","citations","unsupported"]}
+{"id":"q10","question":"What should experiment logs record when comparing RAG configurations?","relevant_doc_ids":["experiments"],"answer_keywords":["dataset version","retrieval metrics","latency","failure"]}
+{"id":"q11","question":"Which pipeline stages add latency to a RAG system?","relevant_doc_ids":["latency"],"answer_keywords":["index lookup","reranking","prompt","generation"]}
+{"id":"q12","question":"At what point in the pipeline is a reranker applied?","relevant_doc_ids":["reranking"],"answer_keywords":["candidates","approximate","precision","top"]}
 

@@ -8,7 +8,12 @@ from rag_eval.data import load_documents, load_questions
 from rag_eval.evaluate import evaluate_questions
 from rag_eval.generator import generate_answer
 from rag_eval.ingest import ingest_directory, write_corpus
-from rag_eval.retriever import EmbeddingProviderError, build_index, load_index, save_index
+from rag_eval.retriever import (
+    EmbeddingProviderError,
+    build_index,
+    load_index,
+    save_index,
+)
 
 
 def ingest_command(args: argparse.Namespace) -> None:

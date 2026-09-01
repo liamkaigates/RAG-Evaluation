@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import secrets
 import threading
 from pathlib import Path
+from typing import Annotated
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAIError
@@ -40,6 +42,20 @@ def create_app(index: RagIndex, questions: list[EvalQuestion], static_dir: str |
     eval_cache: dict[int, dict] = {}
     eval_cache_lock = threading.Lock()
 
+    api_token = os.getenv("RAG_API_TOKEN", "")
+
+    def check_auth(
+        x_api_key: Annotated[str | None, Header()] = None,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> None:
+        if not api_token:
+            return
+        supplied = x_api_key or (authorization.removeprefix("Bearer ").strip() if authorization else "")
+        if not supplied or not secrets.compare_digest(supplied, api_token):
+            raise HTTPException(status_code=401, detail="Invalid or missing API key. Send it as X-API-Key or a Bearer token.")
+
+    protected = [Depends(check_auth)]
+
     @app.get("/")
     @app.get("/dashboard")
     def dashboard() -> FileResponse:
@@ -49,11 +65,11 @@ def create_app(index: RagIndex, questions: list[EvalQuestion], static_dir: str |
     def healthz() -> dict:
         return {"status": "ok", "chunks": len(index.documents)}
 
-    @app.get("/api/summary")
+    @app.get("/api/summary", dependencies=protected)
     def summary() -> dict:
         return summary_payload
 
-    @app.get("/api/search")
+    @app.get("/api/search", dependencies=protected)
     def search(question: str = Query(..., min_length=1), top_k: int = Query(5, ge=1, le=20)) -> dict:
         try:
             results = index.search(question, top_k=top_k)
@@ -69,7 +85,7 @@ def create_app(index: RagIndex, questions: list[EvalQuestion], static_dir: str |
             "results": [result.__dict__ for result in results],
         }
 
-    @app.get("/api/evaluate")
+    @app.get("/api/evaluate", dependencies=protected)
     def evaluate(top_k: int = Query(5, ge=1, le=20), refresh: bool = Query(False)) -> dict:
         if not refresh:
             with eval_cache_lock:

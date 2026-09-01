@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import List
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from rag_eval.data import Document
-
 
 SUPPORTED_EXTENSIONS = {".md", ".txt"}
 
@@ -23,8 +21,8 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def split_markdown_sections(text: str) -> List[tuple[str, str]]:
-    sections: List[tuple[str, str]] = []
+def split_markdown_sections(text: str) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
     current_heading = "Overview"
     current_lines: list[str] = []
     for line in text.splitlines():
@@ -41,7 +39,7 @@ def split_markdown_sections(text: str) -> List[tuple[str, str]]:
     return [(heading, body) for heading, body in sections if body]
 
 
-def ingest_directory(source_dir: str | Path, max_words: int = 180, overlap: int = 35) -> List[Document]:
+def ingest_directory(source_dir: str | Path, max_words: int = 180, overlap: int = 35) -> list[Document]:
     source_root = Path(source_dir)
     if not source_root.exists():
         raise FileNotFoundError(f"Documentation directory not found: {source_root}")
@@ -81,7 +79,7 @@ def ingest_directory(source_dir: str | Path, max_words: int = 180, overlap: int 
     return documents
 
 
-def write_corpus(documents: List[Document], output_path: str | Path) -> None:
+def write_corpus(documents: list[Document], output_path: str | Path) -> None:
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as handle:

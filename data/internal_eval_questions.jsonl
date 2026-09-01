@@ -1,3 +1,6 @@
 {"id": "iq1", "question": "How should production RAG answers cite sources?", "relevant_doc_ids": ["rag-platform#chunk-000", "rag-platform#chunk-002"], "answer_keywords": ["inline", "source", "citations"]}
 {"id": "iq2", "question": "Why does the platform use hybrid search?", "relevant_doc_ids": ["rag-platform#chunk-001"], "answer_keywords": ["sparse", "dense", "hybrid"]}
 {"id": "iq3", "question": "What should RAG audit logs capture?", "relevant_doc_ids": ["security-policy#chunk-001"], "answer_keywords": ["question", "retrieved", "citations", "latency"]}
+{"id": "iq4", "question": "How should the RAG API be deployed securely?", "relevant_doc_ids": ["security-policy#chunk-002"], "answer_keywords": ["authentication", "rate limiting", "versioned", "roll back"]}
+{"id": "iq5", "question": "What happens when an employee marks an answer as unhelpful?", "relevant_doc_ids": ["onboarding#chunk-001"], "answer_keywords": ["question", "sources", "feedback", "evaluation"]}
+{"id": "iq6", "question": "What access controls apply to documentation ingestion?", "relevant_doc_ids": ["security-policy#chunk-000"], "answer_keywords": ["least-privilege", "approved", "source path", "filtered"]}
