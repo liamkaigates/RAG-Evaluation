@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List
 
 from rag_eval.data import EvalQuestion
 from rag_eval.generator import generate_answer
@@ -11,12 +10,12 @@ from rag_eval.retriever import RagIndex
 
 def evaluate_questions(
     index: RagIndex,
-    questions: List[EvalQuestion],
+    questions: list[EvalQuestion],
     top_k: int = 5,
     generation_provider: str | None = None,
     max_workers: int = 8,
 ) -> dict:
-    def evaluate_one(question: EvalQuestion) -> tuple[dict, Dict[str, float], Dict[str, float]]:
+    def evaluate_one(question: EvalQuestion) -> tuple[dict, dict[str, float], dict[str, float]]:
         results = index.search(question.question, top_k=top_k)
         generated = generate_answer(question.question, results, provider=generation_provider)
         retrieval = retrieval_metrics(question, results)

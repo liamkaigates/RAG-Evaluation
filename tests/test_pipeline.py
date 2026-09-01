@@ -1,7 +1,7 @@
 import pickle
 import unittest
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rag_eval.data import load_documents, load_questions
 from rag_eval.evaluate import evaluate_questions

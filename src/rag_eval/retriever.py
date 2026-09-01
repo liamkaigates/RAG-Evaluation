@@ -12,15 +12,20 @@ import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, List, Protocol
+from typing import Any, Protocol
 
 import chromadb
 from chromadb.config import Settings
-from openai import APIConnectionError, APIStatusError, AuthenticationError, OpenAI, RateLimitError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    OpenAI,
+    RateLimitError,
+)
 from rank_bm25 import BM25Okapi
 
 from rag_eval.data import Document
-
 
 COLLECTION_NAME = "internal_docs"
 METADATA_FILE = "metadata.json"
@@ -116,7 +121,7 @@ def _hash_token(token: str, dimension: int) -> tuple[int, float]:
 @dataclass
 class RagIndex:
     path: Path
-    documents: List[Document]
+    documents: list[Document]
     bm25: BM25Okapi
     embedding_model: EmbeddingModel
     sparse_weight: float = 0.45
@@ -133,7 +138,7 @@ class RagIndex:
     def retrieval_mode(self) -> str:
         return f"{self.embedding_model.name}_chromadb_bm25_hybrid"
 
-    def search(self, query: str, top_k: int = 5, sparse_weight: float | None = None) -> List[SearchResult]:
+    def search(self, query: str, top_k: int = 5, sparse_weight: float | None = None) -> list[SearchResult]:
         if not query.strip():
             return []
 
@@ -146,7 +151,7 @@ class RagIndex:
         sparse_ratio = self.sparse_weight if sparse_weight is None else max(0.0, min(1.0, sparse_weight))
         fused_scores = [
             (sparse_ratio * sparse_value) + ((1.0 - sparse_ratio) * dense_value)
-            for sparse_value, dense_value in zip(sparse_normalized, dense_normalized)
+            for sparse_value, dense_value in zip(sparse_normalized, dense_normalized, strict=True)
         ]
 
         candidate_indexes = [
@@ -155,7 +160,7 @@ class RagIndex:
             if fused_scores[index] > 0 or sparse_scores[index] > 0 or dense_scores[index] > 0
         ]
         ranked_indexes = heapq.nlargest(top_k, candidate_indexes, key=fused_scores.__getitem__)
-        results = []
+        results: list[SearchResult] = []
         for index in ranked_indexes:
             document = self.documents[index]
             results.append(
@@ -190,7 +195,7 @@ class RagIndex:
         )
         ids = payload.get("ids", [[]])[0]
         distances = payload.get("distances", [[]])[0]
-        return {doc_id: max(0.0, 1.0 - float(distance)) for doc_id, distance in zip(ids, distances)}
+        return {doc_id: max(0.0, 1.0 - float(distance)) for doc_id, distance in zip(ids, distances, strict=True)}
 
 
 def tokenize(text: str) -> list[str]:
@@ -232,7 +237,7 @@ def open_collection(path: Path):
     )
 
 
-def build_index(documents: List[Document], embedding_provider: str | None = None, dense_dimension: int | None = None) -> RagIndex:
+def build_index(documents: list[Document], embedding_provider: str | None = None, dense_dimension: int | None = None) -> RagIndex:
     if not documents:
         raise ValueError("Cannot build an index with no documents.")
 
