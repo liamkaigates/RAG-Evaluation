@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import heapq
+import json
 import math
 import os
 import pickle
@@ -22,7 +23,8 @@ from rag_eval.data import Document
 
 
 COLLECTION_NAME = "internal_docs"
-METADATA_FILE = "metadata.pkl"
+METADATA_FILE = "metadata.json"
+LEGACY_METADATA_FILE = "metadata.pkl"
 CHROMA_DIR = "chroma"
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_BATCH_SIZE = 256
@@ -271,25 +273,35 @@ def save_index(index: RagIndex, path: str | Path) -> None:
             embeddings=embeddings[start:stop],
             metadatas=metadatas[start:stop],
         )
-    with (path / METADATA_FILE).open("wb") as handle:
-        pickle.dump(
+    with (path / METADATA_FILE).open("w", encoding="utf-8") as handle:
+        json.dump(
             {
-                "documents": index.documents,
-                "bm25": index.bm25,
+                "documents": [document.__dict__ for document in index.documents],
+                "bm25_tokens": [tokenize(document.text) for document in index.documents],
                 "embedding_provider": index.embedding_model.name,
                 "embedding_dimension": index.embedding_model.dimension,
                 "sparse_weight": index.sparse_weight,
             },
             handle,
+            ensure_ascii=True,
         )
 
 
 def load_index(path: str | Path, embedding_provider: str | None = None) -> RagIndex:
     path = Path(path)
-    with (path / METADATA_FILE).open("rb") as handle:
-        metadata = pickle.load(handle)
-    documents = metadata["documents"]
-    bm25 = metadata.get("bm25") or BM25Okapi([tokenize(document.text) for document in documents])
+    metadata_path = path / METADATA_FILE
+    if metadata_path.exists():
+        with metadata_path.open(encoding="utf-8") as handle:
+            metadata = json.load(handle)
+        documents = [Document(**row) for row in metadata["documents"]]
+        token_lists = metadata.get("bm25_tokens") or [tokenize(document.text) for document in documents]
+        bm25 = BM25Okapi(token_lists)
+    else:
+        # Legacy pre-JSON index artifacts; only load index directories you built yourself.
+        with (path / LEGACY_METADATA_FILE).open("rb") as handle:
+            metadata = pickle.load(handle)
+        documents = metadata["documents"]
+        bm25 = metadata.get("bm25") or BM25Okapi([tokenize(document.text) for document in documents])
 
     stored_provider = metadata.get("embedding_provider", "")
     selected_provider = embedding_provider
