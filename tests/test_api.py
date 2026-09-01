@@ -26,6 +26,23 @@ class ApiTest(unittest.TestCase):
     def tearDownClass(cls):
         cls._tmp.cleanup()
 
+    def test_auth_required_when_token_set(self):
+        os.environ["RAG_API_TOKEN"] = "secret-token"
+        try:
+            client = TestClient(create_app(self.index, self.questions, static_dir="static"))
+            denied = client.get("/api/summary")
+            wrong_key = client.get("/api/summary", headers={"X-API-Key": "wrong"})
+            with_key = client.get("/api/summary", headers={"X-API-Key": "secret-token"})
+            with_bearer = client.get("/api/summary", headers={"Authorization": "Bearer secret-token"})
+            health = client.get("/healthz")
+        finally:
+            del os.environ["RAG_API_TOKEN"]
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(wrong_key.status_code, 401)
+        self.assertEqual(with_key.status_code, 200)
+        self.assertEqual(with_bearer.status_code, 200)
+        self.assertEqual(health.status_code, 200)
+
     def test_healthz(self):
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
