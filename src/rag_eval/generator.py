@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 from typing import List
 
 from openai import OpenAI
@@ -10,6 +11,11 @@ from rag_eval.retriever import SearchResult
 
 
 GPT_MODEL = "gpt-4o"
+
+
+@lru_cache(maxsize=1)
+def _openai_client() -> OpenAI:
+    return OpenAI()
 
 
 def tokenize(text: str) -> set[str]:
@@ -40,8 +46,7 @@ def generate_gpt4o_answer(question: str, results: List[SearchResult], max_senten
         f"[S{citation_numbers[result.id]}] {result.citation}\n{result.text}"
         for result in results
     )
-    client = OpenAI()
-    response = client.chat.completions.create(
+    response = _openai_client().chat.completions.create(
         model=GPT_MODEL,
         temperature=0,
         messages=[
