@@ -1,5 +1,7 @@
 # Hybrid RAG Platform
 
+[![CI](https://github.com/liamkaigates/RAG-Evaluation/actions/workflows/ci.yml/badge.svg)](https://github.com/liamkaigates/RAG-Evaluation/actions/workflows/ci.yml)
+
 Production-shaped retrieval-augmented generation project for ingesting internal company documentation, indexing it with hybrid retrieval, and generating grounded answers with source citations.
 
 The platform ingests Markdown/text documentation, chunks it with source metadata, stores OpenAI text embeddings in ChromaDB, indexes sparse keywords with BM25, retrieves relevant context for employee questions, and generates GPT-4o answers with inline citations like `[S1]`.
@@ -75,7 +77,10 @@ make serve-internal-local
 OPENAI_API_KEY=...
 RAG_EMBEDDING_PROVIDER=openai  # default; use local for tests
 RAG_GENERATION_PROVIDER=openai # default; use local for tests
+RAG_API_TOKEN=...              # optional; when set, /api/* requires this key
 ```
+
+Dependencies are pinned in `requirements.lock` (generated with `pip freeze` from `requirements.txt`); `make setup`, CI, and Docker all install from the lockfile. Run `make lint` for ruff + mypy checks; CI runs lint and tests on every push and pull request.
 
 The production path uses OpenAI `text-embedding-3-small` for document/query embeddings and `gpt-4o` for grounded answer generation.
 `make build-internal` requires an OpenAI API key with available embedding quota. If the API returns `insufficient_quota`, use `make build-internal-local` while developing locally, or enable billing/quota on the OpenAI account before rebuilding the production index.
@@ -83,6 +88,7 @@ The production path uses OpenAI `text-embedding-3-small` for document/query embe
 ## Operations
 
 - `GET /healthz` reports service health for load balancers and the Docker healthcheck.
+- Set `RAG_API_TOKEN` to require an API key on all `/api/*` endpoints, sent as an `X-API-Key` header or a `Bearer` token (the dashboard prompts for it once per browser session). Leave it unset for local development. Anything beyond localhost should set it — evaluation and search trigger paid OpenAI calls.
 - `GET /api/evaluate` results are cached in-process per `top_k` (evaluation runs generation for every question); pass `refresh=true` to recompute.
 - Provider failures (missing key, quota, network) return HTTP 503 with a descriptive message instead of a raw 500.
 - Evaluation runs questions concurrently (default 8 workers) when using OpenAI providers.
@@ -107,7 +113,11 @@ Internal docs can be placed under `docs/internal` as `.md` or `.txt` files. `mak
 
 ```bash
 docker build -t hybrid-rag-platform .
-docker run --rm -p 8080:8080 -e OPENAI_API_KEY=$OPENAI_API_KEY hybrid-rag-platform
+docker run --rm -p 8080:8080 \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -e RAG_API_TOKEN=$RAG_API_TOKEN \
+  -v rag-index:/app/artifacts \
+  hybrid-rag-platform
 ```
 
-The container ingests `docs/internal`, builds the ChromaDB/BM25 hybrid index at startup, and serves the FastAPI dashboard on port `8080`.
+On first start the container ingests `docs/internal` and builds the ChromaDB/BM25 hybrid index, then serves the FastAPI dashboard on port `8080`. With the `rag-index` volume mounted, later starts reuse the existing index instead of re-embedding the corpus; delete the volume (or the `artifacts/internal_index` directory inside it) to force a rebuild after documentation changes.
